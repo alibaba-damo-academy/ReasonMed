@@ -1,4 +1,35 @@
-# ReasonMed
+# ReasonMed: A 370K Multi-Agent Generated Dataset for Advancing Medical Reasoning
+
+<p align="center">
+  <a href="https://arxiv.org/">[📖Paper]</a> &nbsp;&nbsp;
+  <a href="https://huggingface.co/datasets/YuSun-AI/ReasonMed">[🤗ReasonMed Dataset]</a>
+</p>
+
+
+<p align="center">
+  <a href="https://huggingface.co/YuSun-AI/ReasonMed">[🤗ReasonMed-7B model]</a> &nbsp;&nbsp;
+  <a href="https://huggingface.co/YuSun-AI/CoTMed">[🤗CoTMed-7B model]</a> &nbsp;&nbsp;
+  <a href="https://huggingface.co/YuSun-AI/ResponseMed">[🤗ReasponseMed-7B model]</a>
+</p>
+
+**Table of Contents**  
+
+1. [Introduction](#introduction)
+2. [Installation](#installation)
+3. [Modules](#modules)
+   - 3.1 [Generate CoTs](#generate-cots)
+   - 3.2 [Evaluate CoTs](#evaluate-cots)
+   - 3.3 [Quality Ranker](#quality-ranker)
+   - 3.4 [Error Refiner](#error-refiner)
+   - 3.5 [Diff Optimizer](#diff-optimizer)
+   - 3.6 [Response Summarizer](#response-summarizer)
+   - 3.7 [Score Evaluator](#score-evaluator)
+4. [Example Pipeline](#example-pipeline)
+   - 4.1 [Easy Pipeline](#easy-pipeline)
+   - 4.2 [Medium Pipeline](#medium-pipeline)
+   - 4.3 [Difficult Pipeline](#difficult-pipeline)
+5. [Conclusion](#conclusion)
+
 
 ## Introduction
 ReasonMed is a comprehensive multi-agent generated dataset designed to advance medical reasoning capabilities. It is equipped with various tools and modules for generating, validating, optimizing, ranking, summarizing, and evaluating Chain-of-Thought (CoT) responses in the medical domain. ReasonMed's goal is to help researchers and practitioners improve and assess medical reasoning in clinical decision-making.
@@ -33,7 +64,7 @@ Note: Ensure that you have access to the models or endpoints mentioned for infer
 
 ## Modules
 
-### 1. **Generate CoTs (`generate_9cot.py`)**
+### Generate CoTs
 This module generates multiple Chain-of-Thought (CoT) responses from three different models, each generating three CoTs for a given question.
 
 #### Command Example:
@@ -68,7 +99,7 @@ The generated CoTs will be saved in a specified JSON file.
 
 <!-- --- -->
 
-### 2. **Evaluate CoTs (`verifier.py`)**
+### Evaluate CoTs
 This script validates the generated CoTs by verifying their correctness against clinical reasoning.
 
 #### Command Example:
@@ -84,7 +115,7 @@ Validates the CoTs and outputs a verdict (e.g., `Correct`, `Error`).
 
 <!-- --- -->
 
-### 3. **Quality Ranker (`quality_ranker.py`)**
+### Quality Ranker
 The quality ranker ranks the CoTs generated for each clinical question, keeping the top two most valid CoTs.
 
 #### Command Example:
@@ -102,7 +133,7 @@ Ranks the CoTs and saves the best two CoTs per clinical question.
 
 <!-- --- -->
 
-### 4. **Error Refiner (`error_refiner_openai.py`)**
+### Error Refiner
 This module refines CoTs that have errors or incomplete reasoning by leveraging error feedback to improve the reasoning process.
 
 #### Command Example:
@@ -121,7 +152,7 @@ Refined CoTs that incorporate error corrections from previous iterations.
 
 <!-- --- -->
 
-### 5. **Diff Optimizer (`diff_opti.py`)**
+### Diff Optimizer
 This module performs advanced optimizations on the CoTs using the Azure OpenAI API. It focuses on deep reasoning improvements based on detailed feedback.
 
 #### Command Example:
@@ -140,7 +171,7 @@ Optimized CoTs that have undergone deeper analysis and improvement.
 
 <!-- --- -->
 
-### 6. **Response Summarizer (`response_summarizer.py`)**
+### Response Summarizer
 This module generates concise summaries for each CoT, transforming verbose reasoning into a one-sentence explanation.
 
 #### Command Example:
@@ -159,7 +190,7 @@ A JSON file with concise summaries for each CoT.
 
 <!-- --- -->
 
-### 7. **Score Evaluator (`score_evaluator.py`)**
+### Score Evaluator
 This module evaluates the clinical accuracy of CoTs based on multiple criteria and generates scores for each CoT.
 
 #### Command Example:
