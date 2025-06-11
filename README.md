@@ -13,15 +13,19 @@ This README provides an overview of ReasonMed's core functionality, installation
 To get started, clone the ReasonMed repository:
 
 ```bash
-git clone https://github.com/your-repository/ReasonMed.git
+git clone https://github.com/YuSun-Work/ReasonMed.git
 cd ReasonMed
 ```
 
 ### Requirements
-Ensure you have the following dependencies installed:
 
-- `Python 3.11+`
-- `pip install -r requirements.txt` (install dependencies from `requirements.txt`)
+
+```bash
+conda create -n reasonmed python=3.11 -y
+conda activate reasonmed
+pip install -r requirements.txt
+```
+
 
 Note: Ensure that you have access to the models or endpoints mentioned for inference in each script.
 
