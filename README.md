@@ -242,3 +242,16 @@ python diff_opti.py --input_json /path/to/save_cot.json --output_json /path/to/o
 ## Conclusion
 
 ReasonMed provides an integrated framework for generating, optimizing, validating, and evaluating medical Chain-of-Thought responses. This comprehensive pipeline is crucial for advancing AI-powered clinical reasoning and decision-making models.
+
+## Citations
+```bibtex
+@misc{sun2025reasonmed370kmultiagentgenerated,
+      title={ReasonMed: A 370K Multi-Agent Generated Dataset for Advancing Medical Reasoning}, 
+      author={Yu Sun and Xingyu Qian and Weiwen Xu and Hao Zhang and Chenghao Xiao and Long Li and Yu Rong and Wenbing Huang and Qifeng Bai and Tingyang Xu},
+      year={2025},
+      eprint={2506.09513},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2506.09513}, 
+}
+```
