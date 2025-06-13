@@ -1,10 +1,9 @@
 # ReasonMed: A 370K Multi-Agent Generated Dataset for Advancing Medical Reasoning
 
 <p align="center">
-  <a href="[https://arxiv.org/](https://arxiv.org/abs/2506.09513)">[📖Paper]</a> &nbsp;&nbsp;
+  <a href="[https://arxiv.org/abs/2506.09513]">[📖Paper]</a> &nbsp;&nbsp;
   <a href="https://huggingface.co/datasets/YuSun-AI/ReasonMed">[🤗ReasonMed Dataset]</a>
 </p>
-
 
 <p align="center">
   <a href="https://huggingface.co/YuSun-AI/ReasonMed">[🤗ReasonMed-7B model]</a> &nbsp;&nbsp;
