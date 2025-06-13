@@ -237,6 +237,14 @@ python error_refiner_openai.py --input_json /path/to/save_cot.json --api_key /pa
 python diff_opti.py --input_json /path/to/save_cot.json --output_json /path/to/optimized_cot.json --api_key /path/to/api_key --azure_endpoint /path/to/azure_endpoint --model /path/to/optimize_model
 ```
 
+## Training
+Stay tuned
+
+
+## Evaluation
+Stay tuned
+
+
 <!-- --- -->
 
 ## Conclusion
