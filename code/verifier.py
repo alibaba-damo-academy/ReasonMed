@@ -1,253 +1,200 @@
 import argparse
 import json
-import re
-from typing import Dict
 import os
+import random
+import re
 import gc
+import concurrent.futures  # For concurrent request processing
+import time  # Used for delays during retries
+from typing import List, Dict, Any
+from openai import AzureOpenAI
+from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
+from tqdm import tqdm  # Import tqdm
 
-from vllm import LLM, SamplingParams
 
-def load_json(file_path: str) -> list:
-    """Load JSON data from file."""
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"File {file_path} not found")
-    with open(file_path, 'r', encoding='utf-8') as f:
+def load_json(path: str) -> List[Dict[str, Any]]:
+    """Function to load a JSON file, raising FileNotFoundError if the file doesn't exist."""
+    if not os.path.exists(path):
+        raise FileNotFoundError(path)
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_json(data: list, file_path: str) -> None:
-    """Save data to JSON file."""
-    with open(file_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
 
-def extract_json(text: str) -> Dict:
-    """Attempt to extract JSON from text with multiple fallback methods."""
+def save_json(obj: Any, path: str) -> None:
+    """Function to save an object as JSON to a file."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, indent=2, ensure_ascii=False)
+
+
+def extract_json(text: str) -> Dict[str, Any] | None:
+    """Function to extract a JSON object from text."""
     text = text.strip()
     try:
         return json.loads(text)
     except json.JSONDecodeError:
         pass
-
-    matches = re.findall(r'{(.*?)}', text, re.DOTALL)
-    for match in matches:
-        candidate = '{' + match + '}'
+    for match in re.findall(r"\{.*?\}", text, flags=re.S):
         try:
-            return json.loads(candidate)
+            return json.loads(match)
         except json.JSONDecodeError:
             continue
-
-    text = text.replace("'", '"')
-    text = re.sub(r'(\w+):', r'"\1":', text)
+    fixed = text.replace("'", '"')
+    fixed = re.sub(r"(\w+)\s*:", r'"\1":', fixed)
     try:
-        return json.loads(text)
+        return json.loads(fixed)
     except json.JSONDecodeError:
         return None
 
-def validate_cot_prompt_template(question: str, options: list, answer: str, cot_content: str) -> str:
-    """Create verification prompt for CoT validation."""
-    options_str = "\n".join([f"{chr(65+i)}) {opt}" for i, opt in enumerate(options)])
-    return f"""You are a medical evaluation expert. Analyze if the Chain-of-Thought (CoT) analysis correctly leads to the answer.
+
+def scoring_prompt(question: str, answer: str, response: str) -> str:
+    """Generate a scoring prompt for medical reasoning evaluation."""
+    return f"""You are a medical reasoning evaluator. Assess the following response based on the following criteria:
+
+1. **Clinical accuracy**: Does the response correctly incorporate medical facts, clinical guidelines, and evidence-based practices? Are the clinical details provided accurate, relevant, and appropriate for the given situation?
+2. **Logical reasoning**: Does the response logically follow the reasoning process required to arrive at the answer? Is the reasoning chain coherent and well-supported by evidence or clinical knowledge?
+3. **Factual correctness**: Are there any factual errors in the response? Are all statements factually correct and consistent with established medical knowledge?
+4. **Completeness**: Does the response cover all necessary aspects of the question? Is it thorough and detailed, addressing the key points without missing critical information?
 
 [Question]
 {question}
 
-[Options]
-{options_str}
+[Response]
+{response}
 
-[Correct Answer]
-{answer}
-
-[CoT Analysis]
-{cot_content}
-
-Evaluate the CoT analysis following these criteria:
-1. Does the analysis correctly identify key clinical factors?
-2. Are all options appropriately considered and evaluated?
-3. Does the reasoning logically lead to the correct answer?
-4. Are there any factual errors in medical knowledge?
-
-Output a JSON object with:
-- "verdict": "Correct" if the CoT analysis is valid and reaches the correct answer, otherwise "Error"
-- "reason": Brief explanation of your evaluation (1-2 sentences)
-
-Example Correct Response:
-{{
-  "verdict": "Correct",
-  "reason": "The analysis correctly identifies key pathophysiology and systematically eliminates incorrect options."
-}}
-
-Example Error Response:
-{{
-  "verdict": "Error",
-  "reason": "The CoT misinterprets the mechanism of urethral obstruction and its renal effects."
-}}
-
-Your evaluation:
+Please evaluate the response on the above criteria and provide a JSON object with two keys:
+  "score": integer between 1 and 10 (1 = poor reasoning, significant factual or clinical errors, incomplete or illogical response; 10 = flawless reasoning, no factual errors, highly accurate and complete response).
+  "justification": A concise explanation of your score, addressing the clinical accuracy, logical reasoning, factual correctness, and completeness.
 """
 
-def batch_inference(args, llm) -> None:
-    """
-    批量生成所有 CoT 字段的验证响应，并将任务保存到中间文件中。
-    每个任务包括原始基本信息、CoT 字段、构造的 prompt 以及 LLM 输出的响应。
-    """
-    data = load_json(args.input_json)
-    tasks = []
-    cot_pattern = re.compile(r'^model\d+_COT\d+$')
+@retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(5))
+def process_request_with_retry(
+    client, model: str, t: Dict[str, Any], max_tokens: int
+) -> Any:
+    """Process a request with retries on failure."""
+    try:
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": t["prompt"]}
+        ]
+        resp = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.7,
+            max_tokens=max_tokens,
+            top_p=0.95,
+            frequency_penalty=0,
+            presence_penalty=0,
+            stop=["</json>"]
+        )
+        raw_response = resp.choices[0].message.content.strip()
+        js = extract_json(raw_response)
+        score = 0
+        if isinstance(js, dict) and "score" in js and isinstance(js["score"], int):
+            score = max(1, min(10, js["score"]))
+        return score
+    except (RetryError, Exception) as e:
+        print(f"Warning: error occurred for item {t['item_index']}: {e}")
+        if '429' in str(e):
+            print("Rate limit exceeded, retrying after a delay...")
+            time.sleep(60)
+            return process_request_with_retry(client, model, t, max_tokens)
+        elif 'NoneType' in str(e):
+            print(f"Error with item {t['item_index']}: NoneType response")
+        return None
 
-    for index, item in enumerate(data):
-        base_info = {k: v for k, v in item.items() if not cot_pattern.match(k)}
-        for key, value in item.items():
-            if cot_pattern.match(key):
-                prompt = validate_cot_prompt_template(
-                    question=item.get("question", ""),
-                    options=item.get("options", []),
-                    answer=item.get("answer", ""),
-                    cot_content=value
-                )
-                tasks.append({
-                    "item_index": index,
-                    "cot_field": key,
-                    "cot_content": value,
-                    "base_info": base_info,
-                    "raw_prompt": prompt
-                })
 
-    sampling_params = SamplingParams(
-        temperature=args.temperature,
-        top_p=args.top_p,
-        max_tokens=args.max_tokens,
-        stop=["</json>"]
-    )
+def batch_score(args: argparse.Namespace, client: AzureOpenAI, input_json: str, intermediate_file: str) -> None:
+    """Batch process scoring of responses."""
+    data = load_json(input_json)
+    # Randomly sample 3000 items for inference
+    sampled_data = random.sample(data, 3000)
+    tasks: List[Dict[str, Any]] = []
 
-    prompts = [task["raw_prompt"] for task in tasks]
-    outputs = llm.generate(prompts, sampling_params)
-    for task, output in zip(tasks, outputs):
-        response_text = output.outputs[0].text.strip()
-        task["llm_response"] = response_text
+    for idx, item in enumerate(sampled_data):
+        question = item.get("instruction", "")
+        response = item.get("output", "")
+        answer = item.get("input", "")
+        prompt = scoring_prompt(question, answer, response)
+        tasks.append({
+            "item_index": idx,
+            "question": question,
+            "answer": answer,
+            "response": response,
+            "prompt": prompt
+        })
 
-    save_json(tasks, args.intermediate_file)
+    scores = []
+    successful_samples = 0
+    failed_samples = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(process_request_with_retry, client, args.model, t, args.max_tokens): t for t in tasks}
+        for future in tqdm(
+            concurrent.futures.as_completed(futures),
+            total=len(futures),
+            desc="Processing tasks",
+            unit="task"
+        ):
+            t = futures[future]
+            score = future.result()
+            if score is not None:
+                scores.append(score)
+                successful_samples += 1
+            else:
+                failed_samples += 1
+            if successful_samples >= 3000:
+                print(f"Successfully processed {successful_samples} samples. Stopping further processing.")
+                break
 
-def iterative_process_intermediate_file(args, llm) -> None:
-    """
-    迭代处理中间文件：
-      - 加载中间文件中所有任务；
-      - 对于未能生成正确 JSON 格式（缺少 "verdict" 和 "reason"）的任务进行重试，直至达到最大迭代次数；
-      - 对于重试后仍无效的任务，标记为 "Error"；
-      - 根据验证结果生成 individual（correct_output 与 error_output）以及聚合版本（correct_split_output 与 error_split_output）。
-    """
-    tasks = load_json(args.intermediate_file)
-    if not tasks:
-        print("中间文件为空，无需处理。")
-        return
+    print(f"Total failed samples: {failed_samples}")
 
-    sampling_params = SamplingParams(
-        temperature=args.temperature,
-        top_p=args.top_p,
-        max_tokens=args.max_tokens,
-        stop=["</json>"]
-    )
+    if successful_samples >= 3000:
+        print("Saving the scores to file...")
+        save_json(scores, intermediate_file)
+        avg_score = sum(scores) / len(scores)
+        print(f"Average score for 3000 samples: {avg_score:.2f}")
+    else:
+        print("Insufficient valid samples processed, not saving the result.")
 
-    # 初始化已验证任务：若 llm_response 中已能解析出正确 JSON 则更新 verdict 字段
-    for task in tasks:
-        json_resp = extract_json(task.get("llm_response", ""))
-        if json_resp is not None and "verdict" in json_resp and "reason" in json_resp:
-            task["verdict"] = "Correct" if json_resp["verdict"].strip().lower() == "correct" else "Error"
-            task["verification_reason"] = json_resp["reason"]
 
-    # 待重试任务：没有 "verdict" 字段的任务
-    pending_tasks = [task for task in tasks if "verdict" not in task]
-    iteration = 0
-    while pending_tasks and iteration < args.max_iterations:
-        print(f"迭代第 {iteration+1} 轮，重试 {len(pending_tasks)} 个任务。")
-        prompts = [task["raw_prompt"] for task in pending_tasks]
-        outputs = llm.generate(prompts, sampling_params)
-        for task, output in zip(pending_tasks, outputs):
-            new_response = output.outputs[0].text.strip()
-            task["llm_response"] = new_response
-            json_resp = extract_json(new_response)
-            if json_resp is not None and "verdict" in json_resp and "reason" in json_resp:
-                task["verdict"] = "Correct" if json_resp["verdict"].strip().lower() == "correct" else "Error"
-                task["verification_reason"] = json_resp["reason"]
-        pending_tasks = [task for task in tasks if "verdict" not in task]
-        iteration += 1
+def calculate_average_score(final_output: str) -> float:
+    """Calculate the average score from a JSON file of scores."""
+    if os.path.exists(final_output) and os.path.getsize(final_output) > 0:
+        data = load_json(final_output)
+        if not data:
+            return 0.0
+        return sum(data) / len(data)
+    else:
+        print(f"Final output file {final_output} is either missing or empty. Skipping average score calculation.")
+        return 0.0
 
-    # 对于仍未获得有效输出的任务，直接标记为 "Error"
-    for task in pending_tasks:
-        task["verdict"] = "Error"
-        task["verification_reason"] = "达到最大重试次数，仍然无法生成有效 JSON 输出。"
-
-    # 清空中间文件（表示所有任务均已处理）
-    save_json([], args.intermediate_file)
-
-    # 根据 verdict 将任务划分为 individual 结果以及聚合版本
-    correct_results = []
-    error_results = []
-    aggregated_correct = {}
-    aggregated_error = {}
-
-    for task in tasks:
-        # 此时每个任务均应存在 "verdict"
-        if task["verdict"].strip().lower() == "correct":
-            correct_results.append(task)
-            idx = task["item_index"]
-            if idx not in aggregated_correct:
-                aggregated_correct[idx] = task["base_info"].copy()
-            aggregated_correct[idx][task["cot_field"]] = task["cot_content"]
-        else:
-            error_results.append(task)
-            idx = task["item_index"]
-            if idx not in aggregated_error:
-                aggregated_error[idx] = task["base_info"].copy()
-            aggregated_error[idx][task["cot_field"]] = task["cot_content"]
-
-    correct_split_results = [aggregated_correct[idx] for idx in sorted(aggregated_correct.keys())]
-    error_split_results = [aggregated_error[idx] for idx in sorted(aggregated_error.keys())]
-
-    save_json(correct_results, args.correct_output)
-    save_json(error_results, args.error_output)
-    save_json(correct_split_results, args.correct_split_output)
-    save_json(error_split_results, args.error_split_output)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="迭代式批量验证 CoT 响应并根据验证结果分离到 individual 及聚合版本输出"
-    )
-    parser.add_argument("--input_json", help="包含 CoT 路径的输入 JSON 文件", required=True)
-    parser.add_argument("--model_path", help="验证模型的路径", required=True)
-    parser.add_argument("--intermediate_file", default="intermediate_results.json",
-                        help="用于存储中间推理结果的文件")
-    parser.add_argument("--correct_output", default="Other/correct_0cot_reason.json",
-                        help="individual 正确 CoT 输出文件")
-    parser.add_argument("--error_output", default="Other/error_0cot_reason.json",
-                        help="individual 错误 CoT 输出文件")
-    parser.add_argument("--correct_split_output", default="correct_0cots.json",
-                        help="聚合后的正确 CoT 输出文件")
-    parser.add_argument("--error_split_output", default="error_0cots.json",
-                        help="聚合后的错误 CoT 输出文件")
-    parser.add_argument("--tensor_parallel_size", type=int, default=8,
-                        help="模型加载的张量并行数")
-    parser.add_argument("--temperature", type=float, default=1.0,
-                        help="采样温度 (默认: 1.0)")
-    parser.add_argument("--top_p", type=float, default=0.95,
-                        help="Top-p 采样参数 (默认: 0.95)")
-    parser.add_argument("--max_tokens", type=int, default=10000,
-                        help="生成的最大 tokens 数 (默认: 10000)")
-    parser.add_argument("--max_iterations", type=int, default=100,
-                        help="对无效输出任务的最大重试迭代次数 (默认: 100)")
+    parser = argparse.ArgumentParser(description="Assess reasoning quality and score responses.")
+    parser.add_argument("--input_jsons", required=True, nargs='+', help="Input files with full reasoning data.")
+    parser.add_argument("--model", required=True, help="OpenAI model name.")
+    parser.add_argument("--azure_endpoint", required=True, help="Azure OpenAI API endpoint.")
+    parser.add_argument("--api_key", required=True, help="Azure OpenAI API key.")
+    parser.add_argument("--intermediate_file", default="intermediate_scores.json")
+    parser.add_argument("--final_output", default="final_scores.json", help="Final cleaned result file.")
+    parser.add_argument("--max_tokens", type=int, default=4000)
 
     args = parser.parse_args()
 
-    # 模型仅加载一次，并传入后续处理流程
-    llm = LLM
-        model=args.model_path,
-        tensor_parallel_size=args.tensor_parallel_size,
-        trust_remote_code=True
+    client = AzureOpenAI(
+        azure_endpoint=args.azure_endpoint,
+        api_key=args.api_key,
+        api_version="2024-10-21"
     )
 
-    # 若中间文件不存在或为空，则批量生成
-    if not os.path.exists(args.intermediate_file) or os.path.getsize(args.intermediate_file) == 0:
-        batch_inference(args, llm)
-    # 迭代式处理中间文件
-    iterative_process_intermediate_file(args, llm)
+    for input_json in args.input_jsons:
+        intermediate_file = f"intermediate_{os.path.basename(input_json)}.json"
+        final_output = f"final_{os.path.basename(input_json)}.json"
 
-    del llm
+        if not os.path.exists(intermediate_file) or os.path.getsize(intermediate_file) == 0:
+            batch_score(args, client, input_json, intermediate_file)
+
+        avg_score = calculate_average_score(intermediate_file)
+        print(f"Average score for {input_json}: {avg_score:.2f}")
+
     gc.collect()
