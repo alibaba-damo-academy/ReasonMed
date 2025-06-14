@@ -8,11 +8,11 @@ from tqdm import tqdm
 from typing import List, Dict
 from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
 import concurrent.futures
-from openai import AzureOpenAI  # 导入 AzureOpenAI 库
+from openai import AzureOpenAI  # Import AzureOpenAI library
 
-# 定义函数加载和保存 JSON 数据
+# Define functions to load and save JSON data
 def load_json(file_path):
-    """安全加载 JSON 文件，若文件不存在或非 JSON 格式则返回空列表。"""
+    """Safely load a JSON file, returning an empty list if the file doesn't exist or isn't valid JSON."""
     if not os.path.exists(file_path):
         return []
     try:
@@ -22,21 +22,22 @@ def load_json(file_path):
     except json.JSONDecodeError:
         return []
 
+
 def save_json(data, file_path):
-    """将 data 写入 JSON 文件。"""
+    """Write data to a JSON file."""
     os.makedirs(os.path.dirname(file_path) or '.', exist_ok=True)
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-# 清理 COT 内容，移除冗余的标记和空白
+# Clean up chain-of-thought content by removing redundant markers and whitespace
 def clean_cot(text: str) -> str:
-    """移除冗余标记和多余空白。"""
+    """Remove redundant markers and extra whitespace."""
     text = re.sub(r"##\s*Thinking[\s\S]*?\n", "", text)
     text = re.sub(r"</?think>", "", text)
     text = re.sub(r"^\s*Alright\s*$", "", text, flags=re.MULTILINE)
     return text.strip()
 
-# 提示模板
+# Prompt template for optimization tasks
 OPTIMIZE_PROMPT = '''
 You are an expert clinician-educator AI tutor. Your mission is to generate an exceptionally comprehensive, in-depth chain-of-thought explanation that rigorously justifies the correct answer for the given clinical MCQ, while specifically addressing and integrating provided error feedback to eliminate previous reasoning flaws. Adhere closely to these instructions to maximize completeness:
 
@@ -47,14 +48,12 @@ You are an expert clinician-educator AI tutor. Your mission is to generate an ex
 
 2. **Structured, Layered Reasoning**  
 Organize your explanation into clear sections:
-a. Restate the question in your own words.
-b. Highlight the key clinical details and relevant background information (e.g., pathophysiology, anatomy, typical presentations, diagnostic tests).
-c. Evaluate each candidate answer, discussing supporting evidence and potential pitfalls.
-d. Systematically rule out options that do not align with the clinical context.
-e. Compare any remaining choices based on their merits.
-f. Conclude with your final answer accompanied by a clear and concise summary of your reasoning.
-
-
+   a. Restate the question in your own words.
+   b. Highlight the key clinical details and relevant background information (e.g., pathophysiology, anatomy, typical presentations, diagnostic tests).
+   c. Evaluate each candidate answer, discussing supporting evidence and potential pitfalls.
+   d. Systematically rule out options that do not align with the clinical context.
+   e. Compare any remaining choices based on their merits.
+   f. Conclude with your final answer accompanied by a clear and concise summary of your reasoning.
 
 **Inputs**   
 - **Question:**  '{question}'  
@@ -64,13 +63,12 @@ f. Conclude with your final answer accompanied by a clear and concise summary of
 - **Error Reasons from Other Attempts:**  '{error_reasons}'  
 
 **Output:**  
-Please optimized Original Chain-of-Thought. Ensure that you explicitly address and rectify each error reason provided.
-'''
+Please optimize the provided chain-of-thought, explicitly addressing and rectifying each error reason."'''
 
-# 使用 Azure OpenAI API 进行推理，并添加重试机制
+# Use Azure OpenAI API for inference with retry mechanism
 @retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(5))
 def azure_api_request(client, prompt: str, model: str, max_tokens: int) -> str:
-    """通过 Azure OpenAI API 发送请求并返回响应结果"""
+    """Send a request through the Azure OpenAI API and return the response content."""
     try:
         messages = [
             {"role": "system", "content": "You are a medical assistant."},
@@ -85,21 +83,21 @@ def azure_api_request(client, prompt: str, model: str, max_tokens: int) -> str:
         )
         return response.choices[0].message.content.strip()
     except (RetryError, Exception) as e:
-        print(f"API 请求错误: {e}")
-        if '429' in str(e):  # 如果是 429 错误，等待重试
+        print(f"API request error: {e}")
+        if '429' in str(e):  # Rate limit error handling
             print("Rate limit exceeded, retrying after a delay...")
-            time.sleep(60)  # 等待 60 秒后重试
-            return azure_api_request(client, prompt, model, max_tokens)  # 递归重试
+            time.sleep(60)  # Wait 60 seconds before retry
+            return azure_api_request(client, prompt, model, max_tokens)
         return ""
 
-# 使用多进程进行并发处理
+# Main function: batch processing with concurrency
 def main(args):
     data = load_json(args.input_json)
     if not data:
-        print(f"无法从 {args.input_json} 读取有效数据。")
+        print(f"Unable to read valid data from {args.input_json}.")
         return
 
-    # 设置 Azure OpenAI API 客户端
+    # Initialize Azure OpenAI API client
     client = AzureOpenAI(
         azure_endpoint=args.azure_endpoint,
         api_key=args.api_key,
@@ -108,7 +106,7 @@ def main(args):
 
     final_list = []
 
-    # 使用 concurrent.futures 进行并行处理
+    # Process items concurrently using ThreadPoolExecutor
     with concurrent.futures.ThreadPoolExecutor(max_workers=40) as executor:
         futures = {}
 
@@ -118,10 +116,10 @@ def main(args):
             answer = item.get("answer", "")
             reasons_map = item.get("verification_reasons", {})
 
-            # 遍历所有 COT 字段
+            # Iterate over all COT fields
             for cot_field, original_cot in item.items():
                 if re.match(r'model\d+_COT\d+', cot_field):
-                    # 收集其他 COT 的错误原因
+                    # Collect error reasons from other attempts
                     error_reasons = [f"- {v}" for k, v in reasons_map.items() if k != cot_field and v]
                     prompt = OPTIMIZE_PROMPT.format(
                         question=question,
@@ -131,12 +129,11 @@ def main(args):
                         error_reasons="\n".join(error_reasons)
                     )
 
-                    # 提交任务
-                    futures[executor.submit(azure_api_request, client, prompt, args.model, args.max_tokens)] = idx
+                    futures[executor.submit(azure_api_request, client, prompt, args.model, args.max_tokens)] = (idx, cot_field)
 
-        # 处理结果
+        # Process completed futures
         for future in tqdm(concurrent.futures.as_completed(futures), total=len(futures), desc="Processing", unit="item"):
-            idx = futures[future]
+            idx, cot_field = futures[future]
             optimized_cot = future.result()
             if optimized_cot:
                 optimized = clean_cot(optimized_cot)
@@ -144,22 +141,22 @@ def main(args):
                     "question": data[idx].get("question", ""),
                     "options": data[idx].get("options", []),
                     "answer": data[idx].get("answer", ""),
-                    "model_choice": list(data[idx].keys())[0],  # 假设每个条目只有一个 COT 字段
+                    "model_choice": cot_field,
                     "COT": optimized,
                     "difficulty": data[idx].get("difficulty", "")
                 })
 
-    # 清理并保存
+    # Save the optimized results
     save_json(final_list, args.output_json)
-    print(f"优化后的 COT 已保存至 {args.output_json}")
+    print(f"Optimized COTs have been saved to {args.output_json}")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Batch optimize COTs in one go using Azure OpenAI API')
-    parser.add_argument('--input_json', type=str, required=True, help='输入 JSON 文件路径')
-    parser.add_argument('--api_key', type=str, required=True, help='Azure OpenAI API 密钥')
+    parser.add_argument('--input_json', type=str, required=True, help='Path to the input JSON file')
+    parser.add_argument('--api_key', type=str, required=True, help='Azure OpenAI API key')
     parser.add_argument('--azure_endpoint', type=str, required=True, help='Azure OpenAI API endpoint')
-    parser.add_argument('--model', type=str, required=True, help='Azure OpenAI 模型名称')
-    parser.add_argument('--output_json', type=str, required=True, help='输出 JSON 文件路径')
-    parser.add_argument('--max_tokens', type=int, default=15000, help='最大生成 tokens 数量')
+    parser.add_argument('--model', type=str, required=True, help='Azure OpenAI model name')
+    parser.add_argument('--output_json', type=str, required=True, help='Path to the output JSON file')
+    parser.add_argument('--max_tokens', type=int, default=15000, help='Maximum number of tokens to generate')
     args = parser.parse_args()
     main(args)
