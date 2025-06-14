@@ -8,7 +8,7 @@ from vllm import LLM, SamplingParams
 
 
 def load_json(file_path):
-    """安全加载 JSON 文件，若文件不存在或非 JSON 格式则返回空列表。"""
+    """Safely load a JSON file, returning an empty list if the file doesn't exist or isn't valid JSON."""
     if not os.path.exists(file_path):
         return []
     try:
@@ -20,18 +20,19 @@ def load_json(file_path):
 
 
 def save_json(data, file_path):
-    """将 data 写入 JSON 文件。"""
+    """Write data to a JSON file."""
     os.makedirs(os.path.dirname(file_path) or '.', exist_ok=True)
     with open(file_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
 def clean_cot(text: str) -> str:
-    """移除冗余标记和多余空白。"""
+    """Remove redundant markers and extra whitespace."""
     text = re.sub(r"##\s*Thinking[\s\S]*?\n", "", text)
     text = re.sub(r"</?think>", "", text)
     text = re.sub(r"^\s*Alright\s*$", "", text, flags=re.MULTILINE)
     return text.strip()
+
 
 OPTIMIZE_PROMPT = '''
 You are an expert clinician-educator AI tutor. Your mission is to generate an exceptionally comprehensive, in-depth chain-of-thought explanation that rigorously justifies the correct answer for the given clinical MCQ, while specifically addressing and integrating provided error feedback to eliminate previous reasoning flaws. Adhere closely to these instructions to maximize completeness:
@@ -55,7 +56,7 @@ Organize your explanation into clear sections:
    g) **Clinical Pearls** – Offer relevant mnemonics, guideline references, or high-yield take-home points.
 
 
-**Inputs**   
+**Inputs**  
 - **Question:**  '{question}'  
 - **Options:**  '{options}'  
 - **Correct Answer:**  '{answer}'  
@@ -67,52 +68,18 @@ Please optimized Original Chain-of-Thought. Ensure that you explicitly address a
 '''
 
 
-# 提示模板
-# OPTIMIZE_PROMPT = '''
-# You are an expert AI tutor. You are given a clinical multiple-choice question, one original chain-of-thought (COT) explanation, and a list of error reasons from other COT attempts. Your task is to produce one refined and error-free chain-of-thought explanation that correctly justifies the answer. Please:
-# 1. Review the question and answer choices thoroughly.
-# 2. Use the provided error reasons to correct any logical gaps, factual inaccuracies, or reasoning oversights in the original COT.
-# 3. Remove any redundant tokens or tags such as "## Thinking", "Alright", "<think>", or "</think>".
-# 4. Structure your reasoning in a detailed, step-by-step manner:
-#    a) Restate the clinical question in your own words.
-#    b) Identify and elaborate on key clinical details (e.g., patient demographics, symptoms, lab results).
-#    c) Explain the underlying pathophysiology and how it applies to this scenario.
-#    d) Evaluate each option individually, noting why it may or may not be appropriate.
-#    e) Eliminate incorrect options with clear, evidence-based justification.
-#    f) Compare the remaining options, highlighting subtle differences.
-#    g) Conclude with the final answer, summarizing why it is the best choice.
-# 5. After outlining the reasoning, refine the explanation for clarity, coherence, ensuring smooth language flow.
-
-# Question:
-# {question}
-
-# Options:
-# {options}
-
-# Answer:
-# {answer}
-
-# Original COT:
-# {original_cot}
-
-# Error Reasons (from other COTs):
-# {error_reasons}
-
-# Please output only the optimized COT text without additional formatting.
-# '''  
-
 
 def main(args):
     data = load_json(args.input_json)
     if not data:
-        print(f"无法从 {args.input_json} 读取有效数据。")
+        print(f"Failed to read valid data from {args.input_json}.")
         return
 
     # Prepare LLM and sampling params
     sampling = SamplingParams(temperature=0.8, top_p=0.9, max_tokens=30000)
     llm = LLM(model=args.model_path, tensor_parallel_size=8)
 
-    # 聚合所有 item 的 prompts
+    # Aggregate prompts for all items
     tasks = []
     prompts = []
     for item in data:
@@ -121,10 +88,10 @@ def main(args):
         options_str = "\n- " + "\n- ".join(options)
         answer = item.get("answer", "")
         reasons_map = item.get("verification_reasons", {})
-        # 遍历所有 COT 字段
+        # Iterate over all COT fields
         for cot_field, original_cot in item.items():
             if re.match(r'model\d+_COT\d+', cot_field):
-                # 收集其他 COT 的错误原因
+                # Collect error reasons from other COTs
                 error_reasons = [f"- {v}" for k, v in reasons_map.items() if k != cot_field and v]
                 prompt = OPTIMIZE_PROMPT.format(
                     question=question,
@@ -142,7 +109,7 @@ def main(args):
                 })
                 prompts.append(prompt)
 
-    # 为每个 prompt 生成对应的 sampling 参数列表，长度保持一致
+    # Generate a list of sampling params corresponding to each prompt, keeping the same length
     params_list = [sampling] * len(prompts)
     outputs = llm.generate(prompts, params_list)
 
@@ -159,18 +126,18 @@ def main(args):
             "difficulty": task.get("difficulty", "")
         })
 
-    # 清理并保存
+    # Clean up and save
     del llm
     gc.collect()
 
     save_json(final_list, args.output_json)
-    print(f"优化后的 COT 已保存至 {args.output_json}")
+    print(f"Optimized COTs have been saved to {args.output_json}")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Batch optimize COTs in one go')
-    parser.add_argument('--input_json', type=str, required=True, help='输入 JSON 文件路径')
-    parser.add_argument('--model_path', type=str, required=True, help='vLLM 模型路径')
-    parser.add_argument('--output_json', type=str, required=True, help='输出 JSON 文件路径')
+    parser.add_argument('--input_json', type=str, required=True, help='Path to the input JSON file')
+    parser.add_argument('--model_path', type=str, required=True, help='Path to the vLLM model')
+    parser.add_argument('--output_json', type=str, required=True, help='Path to the output JSON file')
     args = parser.parse_args()
     main(args)
