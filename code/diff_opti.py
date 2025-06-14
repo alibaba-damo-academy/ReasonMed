@@ -92,7 +92,7 @@ def main():
     parser.add_argument('--output_json', type=str, required=True, help='Path to save optimized COT JSON')
     parser.add_argument('--usage_json', type=str, required=True, help='Path to save prompt/completion usage JSON')
     parser.add_argument('--model', type=str, default='o1-mini-0912', help='Model name (e.g., o1-mini-0912')
-    parser.add_argument('--azure_endpoint', type=str, default='https://medical-east-us.openai.azure.com/', help='Azure endpoint URL')
+    parser.add_argument('--azure_endpoint', type=str, default='', help='Azure endpoint URL')
     parser.add_argument('--api_key', type=str, required=True, help='Azure OpenAI API key')
     parser.add_argument('--api_version', type=str, default='2024-10-21', help='Azure OpenAI API version')
     args = parser.parse_args()
