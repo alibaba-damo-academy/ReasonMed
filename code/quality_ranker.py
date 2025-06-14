@@ -1,4 +1,4 @@
-# select_best_cot.py
+# quality_ranker.py
 """Batch‑evaluate multiple Chain‑of‑Thought (CoT) analyses for each item and
 keep only the two best‑scoring CoTs.
 
