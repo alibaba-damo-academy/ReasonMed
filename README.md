@@ -215,6 +215,7 @@ To generate and evaluate CoTs:
 ```bash
 python generate_9cot.py --data_path /path/to/question.json --model_path1 /path/to/model1 --model_path2 /path/to/model2 --model_path3 /path/to/model3 --json_path /path/to/save_cot.json
 python verifier.py --input_json /path/to/save_cot.json --model_path /path/to/eval_model
+python quality_ranker.py --input_json /path/to/save_cot.json --model_path /path/to/eval_model --intermediate_file /path/to/intermediate.json --final_output /path/to/final_results.json
 ```
 
 ### Medium Pipeline:
