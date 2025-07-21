@@ -17,7 +17,7 @@ from tqdm import tqdm
 from typing import List, Dict
 from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
 import concurrent.futures
-from openai import AzureOpenAI  # 导入 AzureOpenAI 库
+from openai import AzureOpenAI
 
 
 
@@ -68,7 +68,7 @@ from typing import List, Dict, Any
 from openai import AzureOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
 from tqdm import tqdm
-import concurrent.futures  # 用于多线程并发处理
+import concurrent.futures
 
 
 import argparse
@@ -77,8 +77,8 @@ import os
 import random
 import re
 import gc
-import concurrent.futures  # 并发请求处理
-import time  # 用于处理重试时的延时
+import concurrent.futures
+import time
 from typing import List, Dict, Any
 from openai import AzureOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
