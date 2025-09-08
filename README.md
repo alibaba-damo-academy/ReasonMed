@@ -34,6 +34,7 @@
 ReasonMed is a comprehensive multi-agent generated dataset designed to advance medical reasoning capabilities. It is equipped with various tools and modules for generating, validating, optimizing, ranking, summarizing, and evaluating Chain-of-Thought (CoT) responses in the medical domain. ReasonMed's goal is to help researchers and practitioners improve and assess medical reasoning in clinical decision-making.
 
 This README provides an overview of ReasonMed's core functionality, installation instructions, usage examples, and how to integrate each module into your medical reasoning workflow.
+We're optimizing the code for ease of use, so stay tuned.
 
 <!-- --- -->
 
