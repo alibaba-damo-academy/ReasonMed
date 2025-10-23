@@ -5,11 +5,11 @@
   <a href="https://huggingface.co/datasets/YuSun-AI/ReasonMed">[🤗ReasonMed Dataset]</a>
 </p>
 
-<p align="center">
+<!-- <p align="center">
   <a href="https://huggingface.co/YuSun-AI/ReasonMed">[🤗ReasonMed-7B model]</a> &nbsp;&nbsp;
   <a href="https://huggingface.co/YuSun-AI/CoTMed">[🤗CoTMed-7B model]</a> &nbsp;&nbsp;
   <a href="https://huggingface.co/YuSun-AI/ResponseMed">[🤗ReasponseMed-7B model]</a>
-</p>
+</p> -->
 
 **Table of Contents**  
 
