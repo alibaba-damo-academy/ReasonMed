@@ -248,6 +248,11 @@ Stay tuned
 
 <!-- --- -->
 
+## Contact
+```text
+Email: yusunaiwork@gmail.com
+```
+
 ## Conclusion
 
 ReasonMed provides an integrated framework for generating, optimizing, validating, and evaluating medical Chain-of-Thought responses. This comprehensive pipeline is crucial for advancing AI-powered clinical reasoning and decision-making models.
