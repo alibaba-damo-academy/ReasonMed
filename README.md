@@ -263,7 +263,7 @@ Email: yusunaiwork@gmail.com
 ```bibtex
 @misc{sun2025reasonmed370kmultiagentgenerated,
       title={ReasonMed: A 370K Multi-Agent Generated Dataset for Advancing Medical Reasoning}, 
-      author={Yu Sun and Xingyu Qian and Weiwen Xu and Hao Zhang and Chenghao Xiao and Long Li and Yu Rong and Wenbing Huang and Qifeng Bai and Tingyang Xu},
+      author={Yu Sun and Xingyu Qian and Weiwen Xu and Hao Zhang and Chenghao Xiao and Long Li and Deli Zhao and Wenbing Huang and Tingyang Xu and Qifeng Bai and Yu Rong},
       year={2025},
       eprint={2506.09513},
       archivePrefix={arXiv},
